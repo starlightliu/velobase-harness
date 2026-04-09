@@ -175,10 +175,10 @@ export function useLogin() {
     setLoginModalOpen(open);
   };
 
-  const handleGoogleLogin = () => {
+  const handleOAuthLogin = (provider: string) => {
     ensureDeviceKey();
-    track(AUTH_EVENTS.LOGIN_METHOD_SELECT, { method: "google" });
-    void signIn("google", { callbackUrl: getCallbackUrl() });
+    track(AUTH_EVENTS.LOGIN_METHOD_SELECT, { method: provider });
+    void signIn(provider, { callbackUrl: getCallbackUrl() });
   };
 
   const handleEmailMethodSelect = () => {
@@ -386,7 +386,7 @@ export function useLogin() {
     
     // Handlers
     handleModalClose,
-    handleGoogleLogin,
+    handleOAuthLogin,
     handleEmailMethodSelect,
     handleBack,
     handleEmailChange,

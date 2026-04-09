@@ -1,7 +1,7 @@
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
 import Nodemailer from "next-auth/providers/nodemailer";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { oauthProviders, isOAuthProvider } from "./providers";
 import { cookies, headers } from "next/headers";
 
 import { env } from "@/env";
@@ -174,7 +174,7 @@ declare module "next-auth" {
  */
 export const authConfig = {
   providers: [
-    GoogleProvider,
+    ...oauthProviders,
 
     /**
      * Password Login Provider (仅白名单邮箱)
@@ -396,7 +396,7 @@ export const authConfig = {
       // 新用户 + 非著名邮箱：发放登录奖励 299 积分
       if (isNewUser && user.email) {
         const isFamousEmail = isFamousEmailDomain(user.email);
-        const isEmailLogin = account.provider !== "google"; // 非 Google OAuth = Email 登录
+        const isEmailLogin = !isOAuthProvider(account.provider);
         
         // 读取 utm_source 判断是否是自然流量
         const cookieStore = await cookies();
@@ -599,7 +599,7 @@ export const authConfig = {
       const posthog = getServerPostHog();
       if (!posthog) return;
 
-      const method = account.provider === "google" ? "google" : "email";
+      const method = isOAuthProvider(account.provider) ? account.provider : "email";
 
       // For email magic link flow, mark that the user clicked the link
       if (method === "email") {
