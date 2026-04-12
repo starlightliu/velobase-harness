@@ -8,6 +8,18 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL not configured in .env");
+  console.error("   Database is not usable in this environment. Test failed.\n");
+  process.exit(1);
+}
+
+if (!process.env.REDIS_HOST) {
+  console.error("❌ REDIS_HOST not configured in .env");
+  console.error("   Redis is not usable in this environment. Test failed.\n");
+  process.exit(1);
+}
+
 const prisma = new PrismaClient();
 
 let passed = 0;

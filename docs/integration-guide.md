@@ -52,7 +52,7 @@ AI：功能实现（写代码）
 
 | 序号  | 大类               | 三方服务                    | 说明          | 状态  |
 | --- | ---------------- | ----------------------- | ----------- | --- |
-| 9   | 安全（Security）     | Cloudflare Turnstile    | 人机验证（防滥用）   | 待梳理 |
+| 9   | 安全（Security）     | Cloudflare Turnstile    | 人机验证（防滥用）   | 已完成 |
 | 10  | 通知（Notification） | 飞书/Lark + Telegram Bot  | 内部运营通知、用户触达 | 待梳理 |
 | 11  | 广告（Ads）          | Google Ads（离线转化上传）      | 付费获客追踪      | 待梳理 |
 | 12  | 客服（Support）      | SMTP + IMAP（nodemailer） | 用户支持邮件收发    | 待梳理 |

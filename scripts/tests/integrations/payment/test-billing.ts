@@ -13,6 +13,12 @@
 
 import 'dotenv/config'
 
+if (!process.env.VELOBASE_API_KEY) {
+  console.error('❌ VELOBASE_API_KEY not configured in .env')
+  console.error('   Velobase Billing is not usable in this environment. Test failed.\n')
+  process.exit(1)
+}
+
 const testPrefix = `fix_test_${Date.now()}`
 let passed = 0
 let failed = 0

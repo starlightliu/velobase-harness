@@ -16,6 +16,7 @@ import { isFamousEmailDomain } from "./disposable-domains";
 import { normalizeEmail } from "./normalize-email";
 import { CustomPrismaAdapter } from "./prisma-adapter";
 import { checkSignupAbuse, enforceSignupAbuse } from "@/server/features/anti-abuse";
+import { getClientIpFromHeaders } from "@/server/features/cdn-adapters";
 import { verifyPassword } from "./password";
 import { isPasswordLoginAllowed } from "./password-login-allowlist";
 import { SIGNUP_DISABLED } from "@/config/decommission";
@@ -202,10 +203,7 @@ export const authConfig = {
       sendVerificationRequest: async ({ identifier: email, url }) => {
         // Get client IP for rate limiting
         const headersList = await headers();
-        const ip =
-          headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-          headersList.get("x-real-ip") ??
-          "unknown";
+        const ip = getClientIpFromHeaders(headersList);
 
         // Check rate limits
         const rateLimitResult = await checkAuthRateLimit(email, ip);
@@ -271,29 +269,40 @@ export const authConfig = {
   },
   adapter: CustomPrismaAdapter(db),
   secret: env.AUTH_SECRET,
-  // Behind Cloudflare Flexible SSL, secure: false for all auth cookies
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
-    },
-    callbackUrl: {
-      name: `next-auth.callback-url`,
-      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
-    },
-    csrfToken: {
-      name: `next-auth.csrf-token`,
-      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false },
-    },
-    pkceCodeVerifier: {
-      name: `next-auth.pkce.code_verifier`,
-      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false, maxAge: 900 },
-    },
-    state: {
-      name: `next-auth.state`,
-      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false, maxAge: 900 },
-    },
-  },
+  // Cookie secure 属性：
+  // - Cloudflare Flexible SSL (CF → HTTP → 源站): 必须 secure=false
+  // - 开发环境 (localhost HTTP): 必须 secure=false
+  // - 生产 Full SSL / 直连 HTTPS: secure=true
+  // 通过 COOKIE_SECURE env var 覆盖，或自动推断（非生产 = false）
+  cookies: (() => {
+    const secure = process.env.COOKIE_SECURE === 'true'
+      ? true
+      : process.env.COOKIE_SECURE === 'false'
+        ? false
+        : process.env.NODE_ENV === 'production';
+    return {
+      sessionToken: {
+        name: `next-auth.session-token`,
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure },
+      },
+      callbackUrl: {
+        name: `next-auth.callback-url`,
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure },
+      },
+      csrfToken: {
+        name: `next-auth.csrf-token`,
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure },
+      },
+      pkceCodeVerifier: {
+        name: `next-auth.pkce.code_verifier`,
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure, maxAge: 900 },
+      },
+      state: {
+        name: `next-auth.state`,
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure, maxAge: 900 },
+      },
+    };
+  })(),
   events: {
     signIn: async ({ user, account, isNewUser }) => {
       if (!user.id || !account) return;
@@ -364,14 +373,10 @@ export const authConfig = {
         let remoteIp: string | null = null;
         try {
           const headersList = await headers();
-          remoteIp =
-            headersList.get("cf-connecting-ip") ??
-            headersList.get("x-real-ip") ??
-            headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-            null;
+          const resolvedIp = getClientIpFromHeaders(headersList);
+          remoteIp = resolvedIp === 'unknown' ? null : resolvedIp;
 
           if (remoteIp) {
-            // 尽早把 signupIp 写回，保证后续 createUser/email-abuse 能查到
             await db.user.update({
               where: { id: user.id },
               data: { signupIp: remoteIp },
@@ -537,11 +542,8 @@ export const authConfig = {
       let signupIp: string | null = null;
       try {
         const headersList = await headers();
-        signupIp =
-          headersList.get("cf-connecting-ip") ??
-          headersList.get("x-real-ip") ??
-          headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-          null;
+        const resolvedSignupIp = getClientIpFromHeaders(headersList);
+        signupIp = resolvedSignupIp === 'unknown' ? null : resolvedSignupIp;
 
         if (signupIp) {
           await db.user.update({

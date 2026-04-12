@@ -17,6 +17,18 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL not configured in .env')
+  console.error('   Database is not usable in this environment. Test failed.\n')
+  process.exit(1)
+}
+
+if (!process.env.VELOBASE_API_KEY) {
+  console.error('❌ VELOBASE_API_KEY not configured in .env')
+  console.error('   Velobase Billing is not usable in this environment. Test failed.\n')
+  process.exit(1)
+}
+
 const prisma = new PrismaClient()
 const testPrefix = `abuse_test_${Date.now()}`
 let passed = 0
