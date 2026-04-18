@@ -12,19 +12,28 @@
 
 - Next.js 15 (App Router) + React 19 + TypeScript
 - tRPC v11 + Zod（类型安全 API）
+- Hono（独立 API 服务）
 - Prisma 6 + PostgreSQL（数据库）+ Redis（缓存/队列）
 - NextAuth v5（认证）
 - Tailwind CSS 4 + Radix UI（UI）
-- BullMQ（后台任务）
+- BullMQ + Fastify（后台任务 + Worker HTTP）
 
 ## 项目结构
 
 ```
 src/
 ├── app/              # Next.js 页面和 API 路由
+├── api/              # 独立 Hono API 服务（Webhook、集成接口）
+│   ├── app.ts        # Hono 应用工厂
+│   ├── start.ts      # startApi() 启动函数
+│   ├── index.ts      # 独立进程入口
+│   └── routes/       # API 路由（health、webhooks 等）
+├── web/              # Web 服务启动封装
+│   └── start.ts      # startWeb() 启动函数（SERVICE_MODE=all 用）
 ├── modules/          # 业务功能模块（参考 modules/example/）
 ├── server/           # 服务端代码
 │   ├── api/          # tRPC 路由（root.ts 是注册中心）
+│   ├── standalone.ts # SERVICE_MODE 统一入口
 │   ├── auth/         # 认证
 │   ├── email/        # 统一邮件服务
 │   ├── billing/      # 计费（Velobase SDK）
@@ -33,8 +42,24 @@ src/
 │   └── ...
 ├── components/       # 共享 UI 组件
 ├── workers/          # BullMQ 后台任务
+│   ├── start.ts      # startWorker() 启动函数
+│   ├── registry.ts   # WorkerRegistry 自动注册
+│   ├── index.ts      # 独立进程入口
+│   └── ...
 └── analytics/        # 事件追踪
 ```
+
+## 三服务架构
+
+本框架支持三类运行时进程，通过 `SERVICE_MODE` 环境变量灵活组合：
+
+- `SERVICE_MODE=all`（默认）：Web + API + Worker 在同一进程
+- `SERVICE_MODE=web`：仅 Next.js
+- `SERVICE_MODE=api`：仅 Hono API
+- `SERVICE_MODE=worker`：仅 BullMQ Worker
+- 支持逗号组合：`SERVICE_MODE=web,api`
+
+统一入口：`src/server/standalone.ts`
 
 ## 添加新功能
 
@@ -86,6 +111,8 @@ src/
 
 > 详细架构和网关配置 → `[docs/integrations/payment/](./docs/integrations/payment/)`
 
+- Stripe 客户端**必须**通过 `getStripe()` from `@/server/order/services/stripe/client` 获取，**禁止**自行 `new Stripe()` 或 `import("stripe")`
+- `apiVersion` 由 `client.ts` 的 `STRIPE_API_VERSION` 统一管理，**禁止**在其他文件中硬编码
 - 发起支付通过 `trpc.order.checkout`，**禁止**在前端直接调用 Stripe SDK
 - 支付状态更新仅由 Webhook 驱动，前端 `confirmPayment` 仅作补偿轮询
 - 权益发放通过 `fulfillment/manager.ts`，**禁止**在 Webhook handler 中直接操作余额
@@ -98,13 +125,21 @@ src/
 
 - 统一使用 `@/server/storage` 导出的函数，**禁止**直接调用 S3 SDK
 
+### 独立 API 服务（Hono）
+
+- API 路由写在 `src/api/routes/` 目录下，使用 Hono 路由语法
+- 在 `src/api/app.ts` 中通过 `app.route()` 注册新路由
+- 适合放到 API 服务的：Webhook 接收、对外集成接口、不依赖 Next.js 的 HTTP 端点
+- 仍需 Next.js 能力的（SSR、tRPC、NextAuth 回调）保留在 `src/app/api/`
+- **禁止**在 API 服务中导入 Next.js 特有模块（`next/server`、`next/headers` 等）
+
 ### 后台任务
 
 > 详细架构和添加新队列的步骤 → `[docs/integrations/queue/](./docs/integrations/queue/)`
 
 - 参考 `src/modules/example/worker/` 创建新的后台任务
 - 使用 `createWorkerInstance()` 工厂函数创建 Worker，**禁止**直接 `new Worker()`
-- 新队列必须注册到 `src/workers/queues/index.ts` + `processors/index.ts` + `index.ts`
+- 新队列必须在 `src/workers/queues/index.ts` + `processors/index.ts` 导出，并在 `src/workers/start.ts` 中通过 `registry.register()` 注册
 
 ### 分析（Analytics）
 

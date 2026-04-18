@@ -1,4 +1,4 @@
-import { getStripeClient } from "../../providers/stripe";
+import { getStripe } from "./client";
 import { db } from "@/server/db";
 import { logger } from "@/server/shared/telemetry/logger";
 import { isStripeNoSuchCustomerError } from "./stripe-error-utils";
@@ -33,7 +33,7 @@ export async function chargeWithSavedCard({
   productId,
   metadata,
 }: ChargeSavedCardParams): Promise<ChargeSavedCardResult> {
-  const stripe = getStripeClient();
+  const stripe = getStripe();
 
   // 1. 获取用户的 Stripe Customer ID
   const user = await db.user.findUnique({
@@ -166,7 +166,7 @@ export async function chargeWithSavedCard({
  * 检查用户是否有保存的支付方式
  */
 export async function hasSavedPaymentMethod(userId: string): Promise<boolean> {
-  const stripe = getStripeClient();
+  const stripe = getStripe();
 
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -196,7 +196,7 @@ export async function getSavedCardInfo(userId: string): Promise<{
   expMonth?: number;
   expYear?: number;
 } | null> {
-  const stripe = getStripeClient();
+  const stripe = getStripe();
 
   const user = await db.user.findUnique({
     where: { id: userId },

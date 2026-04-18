@@ -12,6 +12,7 @@ import type { Job } from "bullmq";
 import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { getLarkBot, LARK_CHAT_IDS } from "@/lib/lark";
+import { getStripe } from "@/server/order/services/stripe/client";
 import type { PaymentReconciliationJobData } from "@/workers/queues/payment-reconciliation.queue";
 import { getCurrentLAHour, getDailyWindowLA, getHourlyWindowLA } from "../billing-reconciliation/time";
 import { BILLING_RECONCILIATION_AT } from "../billing-reconciliation/constants";
@@ -104,9 +105,7 @@ export async function processPaymentReconciliation(job: Job<PaymentReconciliatio
     let stripePaidButStillPending = 0;
     if (stripePending.length > 0) {
       try {
-        const Stripe = (await import("stripe")).default;
-        // Use env directly: read-only queries only
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-09-30.clover" });
+        const stripe = getStripe();
         const limit = pLimit(5);
 
         await Promise.all(

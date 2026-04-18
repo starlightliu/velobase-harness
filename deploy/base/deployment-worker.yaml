@@ -38,6 +38,8 @@ spec:
         env:
         - name: APP_NAME
           value: vibevideo-worker
+        - name: SERVICE_MODE
+          value: "worker"
         - name: POD_IP
           valueFrom:
             fieldRef:

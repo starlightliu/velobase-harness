@@ -1,8 +1,18 @@
+# ===========================================================================
+# Standalone (all-in-one) Deployment
+#
+# Use this instead of the three separate Deployments when you want a single
+# Pod running Web + API + Worker together (dev / small-scale).
+#
+# To switch: in kustomization.yaml, replace the three deployment + service
+# resources with this file and service-standalone.yaml.
+# ===========================================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vibevideo
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: vibevideo
@@ -15,14 +25,19 @@ spec:
       # - name: your-registry-secret
       containers:
       - name: vibevideo
-        image: your-registry/your-org/vibevideo-web
+        image: your-registry/your-org/vibevideo
         ports:
-        - containerPort: 3000
+        - name: web
+          containerPort: 3000
+        - name: worker
+          containerPort: 3001
+        - name: api
+          containerPort: 3002
         livenessProbe:
           httpGet:
             path: /api/health
             port: 3000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 20
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
@@ -30,7 +45,7 @@ spec:
           httpGet:
             path: /api/ready
             port: 3000
-          initialDelaySeconds: 10
+          initialDelaySeconds: 15
           periodSeconds: 30
           timeoutSeconds: 5
           successThreshold: 1
@@ -38,11 +53,10 @@ spec:
         - name: APP_NAME
           value: vibevideo
         - name: SERVICE_MODE
-          value: "web"
+          value: "all"
         - name: POD_IP
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
         - name: AUTH_TRUST_HOST
           value: "true"
-

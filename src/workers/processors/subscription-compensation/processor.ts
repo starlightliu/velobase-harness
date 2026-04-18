@@ -8,26 +8,16 @@
  *   - 且本地尚未创建 REGULAR 周期 / 发放会员积分
  */
 import type { Job } from "bullmq";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
-import { getStripeSecretKey } from "@/server/shared/env";
 import { BaseWebhookResult } from "@/server/order/providers/types";
 import type { SubscriptionCompensationJobData } from "../../queues/subscription-compensation.queue";
 import type { PaymentWebhookResult } from "@/server/order/providers/types";
 import { handleStripeSubscriptionRenewal } from "@/server/order/services/handle-webhooks";
+import { getStripe } from "@/server/order/services/stripe/client";
 
 const logger = createLogger("subscription-compensation");
-
-let _stripe: Stripe | null = null;
-function getStripe(): Stripe {
-  if (!_stripe) {
-    _stripe = new Stripe(getStripeSecretKey(), {
-      apiVersion: "2025-09-30.clover",
-    });
-  }
-  return _stripe;
-}
 
 export async function processSubscriptionCompensationJob(
   job: Job<SubscriptionCompensationJobData>

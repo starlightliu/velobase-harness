@@ -1,31 +1,31 @@
 /**
- * Worker Entry Point (standalone process)
+ * API Service Entry Point (standalone process)
  *
- * Used by `worker:dev` and `worker:prod` scripts. When running inside
- * SERVICE_MODE=all, `src/server/standalone.ts` calls `startWorker()` directly
+ * Used by `api:dev` and `api:prod` scripts. When running inside
+ * SERVICE_MODE=all, `src/server/standalone.ts` calls `startApi()` directly
  * instead of this file.
  */
 import "dotenv/config";
 
-import { startWorker } from "./start";
+import { startApi } from "./start";
 import { createLogger } from "@/lib/logger";
 
-const log = createLogger("worker:main");
+const log = createLogger("api:main");
 
-let workerHandle: Awaited<ReturnType<typeof startWorker>> | undefined;
+let apiHandle: Awaited<ReturnType<typeof startApi>> | undefined;
 
 async function main() {
-  log.info("Starting Worker service...");
-  workerHandle = await startWorker();
+  log.info("Starting API service...");
+  apiHandle = await startApi();
 }
 
 async function shutdown(signal: string) {
   log.info({ signal }, "Received shutdown signal");
   try {
-    await workerHandle?.shutdown();
+    await apiHandle?.shutdown();
     process.exit(0);
-  } catch (error) {
-    log.error({ error }, "Error during shutdown");
+  } catch (err) {
+    log.error({ error: err }, "Error during shutdown");
     process.exit(1);
   }
 }

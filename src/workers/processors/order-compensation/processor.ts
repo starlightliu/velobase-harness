@@ -5,7 +5,6 @@
  * 如果网关显示已支付但本地未处理，则触发补偿履约
  */
 import type { Job } from "bullmq";
-import Stripe from "stripe";
 import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { getServerPostHog } from "@/analytics/server";
@@ -13,19 +12,10 @@ import { BILLING_EVENTS } from "@/analytics/events/billing";
 import { enqueueGoogleAdsUploadsForPayment } from "@/server/ads/google-ads/queue";
 import { getNowPaymentsPaymentStatus } from "@/server/order/providers/nowpayments";
 import { sendOrderPaymentNotificationByPaymentId } from "@/server/order/services/send-order-payment-notification";
+import { getStripe } from "@/server/order/services/stripe/client";
 import type { OrderCompensationJobData } from "../../queues/order-compensation.queue";
 
 const logger = createLogger("order-compensation");
-
-let _stripe: Stripe | null = null;
-function getStripe(): Stripe {
-  if (!_stripe) {
-    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2025-09-30.clover",
-    });
-  }
-  return _stripe;
-}
 
 function mapNowPaymentsTerminalStatus(status: string | null | undefined):
   | "PENDING"

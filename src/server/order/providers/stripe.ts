@@ -1,6 +1,6 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { BaseWebhookResult, type PaymentProvider, type ProviderOrder, type ProviderPayment } from "./types";
-import { getStripeSecretKey, getStripeWebhookSecret } from "@/server/shared/env";
+import { getStripeWebhookSecret } from "@/server/shared/env";
 import { logger } from "@/server/shared/telemetry/logger";
 import {
   stripeCheckoutSessionSchema,
@@ -13,16 +13,9 @@ import {
   voidAffiliateEarningsForStripeInvoiceRefund,
 } from "@/server/affiliate/services/ledger";
 import type { NormalizedSubscriptionWebhookData } from "./types";
+import { getStripe } from "@/server/order/services/stripe/client";
 
-// Lazy initialization of Stripe client
-let stripe: Stripe | null = null;
-
-export function getStripeClient(): Stripe {
-  stripe ??= new Stripe(getStripeSecretKey(), {
-    apiVersion: "2025-09-30.clover",
-  });
-  return stripe;
-}
+export { getStripe as getStripeClient } from "@/server/order/services/stripe/client";
 
 // Stripe Clover 版本 webhook payload 的 invoice.subscription 可能缺失，
 // 需要从多个路径提取 subscription id（与 backfill 脚本逻辑保持一致）。
@@ -123,7 +116,7 @@ async function handleStripeRefundOrDispute(params: {
 
 export const stripeProvider: PaymentProvider = {
   async confirmPayment(params: { checkoutSessionId?: string; gatewayTransactionId?: string }) {
-    const stripe = getStripeClient();
+    const stripe = getStripe();
     const checkoutSessionId = params.checkoutSessionId;
     const gatewayTransactionId = params.gatewayTransactionId;
 
@@ -151,12 +144,12 @@ export const stripeProvider: PaymentProvider = {
   },
 
   async expireCheckoutSession(checkoutSessionId: string) {
-    const stripe = getStripeClient();
+    const stripe = getStripe();
     await stripe.checkout.sessions.expire(checkoutSessionId);
   },
 
   async createPayment({ payment, order }: { payment: ProviderPayment; order: ProviderOrder }) {
-    const stripe = getStripeClient();
+    const stripe = getStripe();
     const stripeCustomerId = (payment.extra?.stripeCustomerId as string | undefined) ?? undefined;
     const extraMetadata =
       payment.extra &&
@@ -218,7 +211,7 @@ export const stripeProvider: PaymentProvider = {
   },
 
   async createSubscription({ payment, order }: { payment: ProviderPayment; order: ProviderOrder }) {
-    const stripe = getStripeClient();
+    const stripe = getStripe();
     const stripeCustomerId = (payment.extra?.stripeCustomerId as string | undefined) ?? undefined;
     const extraMetadata =
       payment.extra &&
@@ -335,7 +328,7 @@ export const stripeProvider: PaymentProvider = {
   },
 
   async handlePaymentWebhook(req: Request) {
-    const stripe = getStripeClient();
+    const stripe = getStripe();
     const signature = req.headers.get("stripe-signature");
     if (!signature) return null;
     const body = await req.text();
@@ -546,7 +539,7 @@ export const stripeProvider: PaymentProvider = {
   },
 
   async handleSubscriptionWebhook(req: Request) {
-    const stripe = getStripeClient();
+    const stripe = getStripe();
     const signature = req.headers.get("stripe-signature");
     if (!signature) return null;
     const body = await req.text();

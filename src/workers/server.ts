@@ -2,20 +2,17 @@ import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { FastifyAdapter } from "@bull-board/fastify";
 import fastify, { type FastifyInstance } from "fastify";
-import {
-  orderCompensationQueue,
-  subscriptionCompensationQueue,
-  subscriptionMonthlyCreditsQueue,
-  staleJobCleanupQueue,
-  conversionAlertQueue,
-  touchDeliveryQueue,
-  supportSyncQueue,
-  supportProcessQueue,
-  supportSendQueue,
-  googleAdsUploadQueue,
-} from "./queues";
+import type { Queue } from "bullmq";
 
-export async function createServer(): Promise<FastifyInstance> {
+/**
+ * Creates the Fastify HTTP server for the Worker process.
+ *
+ * @param queues - Queue instances to expose via Bull Board. When omitted the
+ *   board is created with an empty list (useful for testing).
+ */
+export async function createServer(
+  queues: Queue[] = [],
+): Promise<FastifyInstance> {
   const server = fastify();
 
   // Bull Board Setup
@@ -23,18 +20,7 @@ export async function createServer(): Promise<FastifyInstance> {
   serverAdapter.setBasePath("/_worker/queues");
 
   createBullBoard({
-    queues: [
-      new BullMQAdapter(orderCompensationQueue),
-      new BullMQAdapter(subscriptionMonthlyCreditsQueue),
-      new BullMQAdapter(subscriptionCompensationQueue),
-      new BullMQAdapter(staleJobCleanupQueue),
-      new BullMQAdapter(conversionAlertQueue),
-      new BullMQAdapter(touchDeliveryQueue),
-      new BullMQAdapter(supportSyncQueue),
-      new BullMQAdapter(supportProcessQueue),
-      new BullMQAdapter(supportSendQueue),
-      new BullMQAdapter(googleAdsUploadQueue),
-    ],
+    queues: queues.map((q) => new BullMQAdapter(q)),
     serverAdapter,
   });
 
@@ -47,9 +33,7 @@ export async function createServer(): Promise<FastifyInstance> {
     return { status: "ok", timestamp: new Date().toISOString() };
   });
 
-  // Readiness probe for Kubernetes
   server.get("/ready", async () => {
-    // 如果后续需要更严格的就绪检查，可以在这里添加 Redis / 队列 等依赖检查
     return { status: "ready", timestamp: new Date().toISOString() };
   });
 

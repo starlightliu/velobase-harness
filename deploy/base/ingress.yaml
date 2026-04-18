@@ -43,4 +43,14 @@ spec:
             name: vibevideo-worker
             port:
               number: 80
+  - host: api.your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vibevideo-api
+            port:
+              number: 80
 

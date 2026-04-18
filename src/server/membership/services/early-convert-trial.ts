@@ -1,16 +1,6 @@
-import Stripe from "stripe";
 import { db } from "@/server/db";
-import { getStripeSecretKey } from "@/server/shared/env";
 import { logger } from "@/server/shared/telemetry/logger";
-
-let stripe: Stripe | null = null;
-
-function getStripeClient(): Stripe {
-  stripe ??= new Stripe(getStripeSecretKey(), {
-    apiVersion: "2025-09-30.clover",
-  });
-  return stripe;
-}
+import { getStripe } from "@/server/order/services/stripe/client";
 
 interface EarlyConvertTrialParams {
   userId: string;
@@ -60,7 +50,7 @@ export async function earlyConvertTrial({ userId }: EarlyConvertTrialParams) {
     throw new Error("Only Stripe subscriptions are supported for early conversion");
   }
 
-  const stripe = getStripeClient();
+  const stripe = getStripe();
 
   logger.info(
     {

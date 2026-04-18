@@ -1,9 +1,27 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# ============================================================================
+# Split mode (default): three separate Deployments + Services
+#
+# To switch to standalone (all-in-one) mode, comment out the split resources
+# below and uncomment the standalone section.
+# ============================================================================
+
 resources:
+# --- Split mode (Web + API + Worker as separate pods) ---
 - deployment.yaml
+- deployment-api.yaml
 - deployment-worker.yaml
 - service.yaml
+- service-api.yaml
 - service-worker.yaml
 - ingress.yaml
 
+# --- Standalone mode (single pod, SERVICE_MODE=all) ---
+# Uncomment these and comment out the split resources above:
+# - deployment-standalone.yaml
+# - service.yaml
+# - service-api.yaml
+# - service-worker.yaml
+# - ingress.yaml

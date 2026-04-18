@@ -143,8 +143,14 @@ cp .env.example .env        # 复制模板，填入必需变量
 docker compose up -d        # 启动 PostgreSQL + Redis
 pnpm db:push                # 同步 schema，创建所有数据表
 pnpm db:seed                # 写入种子数据（Agent、产品、测试账号）
-pnpm dev                    # 主应用 http://localhost:3000
-pnpm worker:dev             # 新终端，Worker 服务 http://localhost:3001
+
+# 方式 A：一键启动全部（推荐开发时使用）
+pnpm dev:all                # Web :3000 + API :3002 + Worker :3001
+
+# 方式 B：分别启动（各开一个终端）
+pnpm dev                    # Web 主应用 http://localhost:3000
+pnpm api:dev                # API 服务 http://localhost:3002
+pnpm worker:dev             # Worker 服务 http://localhost:3001
 ```
 
 **seed 写入的内容：**
@@ -307,10 +313,10 @@ SupportTicket
 
 > 目标：在生产环境稳定运行
 
-- 构建 Docker 镜像（Web + Worker 分别部署）
+- 选择部署模式：统一镜像（`Dockerfile`，`SERVICE_MODE` 控制）或拆分镜像（`Dockerfile.web` / `.api` / `.worker`）
 - 配置生产级数据库（[数据库文档](./docs/integrations/database/)）
 - 配置 SSL、CI/CD、健康检查告警
-- Worker `/health` + `/ready` 端点已内置
+- 所有三类服务均内置 `/health` + `/ready` 端点
 
 ### 阶段九：安全加固
 
@@ -341,15 +347,39 @@ SupportTicket
 系统通过 `resolvePaymentGateway()` 自动选择支付渠道（详见[支付文档](./docs/integrations/payment/)）。  
 开发测试可用 `FORCE_PAYMENT_GATEWAY` 强制指定。
 
-### Worker 双进程架构
+### 三服务架构与 SERVICE_MODE
+
+本框架支持三类运行时进程，通过 `SERVICE_MODE` 环境变量灵活组合：
 
 ```
-主服务（Next.js :3000）  ── queue.add() ──▶  Worker 进程（BullMQ :3001）
-  处理 HTTP 请求                                  消费队列任务
-  不阻塞等待耗时操作                               调用 AI API → 存储结果
+SERVICE_MODE=all（默认）
+┌─────────────────────────────────────────────┐
+│  单进程 / 单 Pod                              │
+│                                             │
+│  Web（Next.js :3000）                         │
+│  API（Hono :3002）                            │
+│  Worker（BullMQ + Fastify :3001）              │
+└─────────────────────────────────────────────┘
+
+SERVICE_MODE=web / api / worker（生产拆分）
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  Web :3000   │  │  API :3002   │  │ Worker :3001 │
+│  Next.js     │  │  Hono        │  │ BullMQ       │
+└──────────────┘  └──────────────┘  └──────────────┘
+  各自独立 Pod，同一镜像不同 SERVICE_MODE
 ```
 
-Worker 独立部署、可单独扩缩容、故障不影响主服务。详见[队列文档](./docs/integrations/queue/)。
+| 服务 | 职责 | 入口 |
+| --- | --- | --- |
+| Web | 面向浏览器的 Next.js 站点与 tRPC | `next start` / `src/web/start.ts` |
+| API | 独立 HTTP 面：集成、Webhook、解耦接口 | `src/api/index.ts` |
+| Worker | BullMQ 异步任务与定时作业 | `src/workers/index.ts` |
+
+- 开发/小规模：`SERVICE_MODE=all` — 1 个 Pod，省资源
+- 生产：3 个 Pod，各自 `SERVICE_MODE=web/api/worker`，独立扩缩容
+- 按需组合：`SERVICE_MODE=web,api`（Web + API 合并）
+
+详见 [docs/architecture/web-api-service-split.md](./docs/architecture/web-api-service-split.md)。
 
 ### 多环境行为差异
 

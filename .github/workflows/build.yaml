@@ -40,7 +40,7 @@ jobs:
           echo "COMMIT_MSG=${COMMIT_MSG}" >> $GITHUB_OUTPUT
           echo "COMMIT_AUTHOR=${COMMIT_AUTHOR}" >> $GITHUB_OUTPUT
 
-  build-and-deploy:
+  build:
     needs: setup
     runs-on: ubuntu-latest
     steps:
@@ -81,18 +81,6 @@ jobs:
             cp .env.dev .env
           fi
 
-      - name: Debug verify env file
-        run: |
-          echo "ENV_NAME=${{ needs.setup.outputs.ENV_NAME }} VERSION=${{ needs.setup.outputs.VERSION }}"
-          echo "PWD=$(pwd)"
-          ls -la .env* || true
-          if [ -f .env ]; then
-            echo ".env present; size: $(wc -c < .env) bytes"
-            grep -E '^[A-Z0-9_]+=' .env | cut -d= -f1 | head -n 20 || true
-          else
-            echo ".env missing"
-          fi
-
       - name: Build Next.js application
         run: pnpm build
 
@@ -100,22 +88,56 @@ jobs:
         run: |
           echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.ALIYUN_REGISTRY_USERNAME }}" --password-stdin
 
+      # --- Unified image: contains Next.js standalone + API + Worker source ---
+      - name: Build and Push Unified Docker Image
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo
+          TAG=${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
+          LATEST=${{ needs.setup.outputs.ENV_NAME }}-latest
+
+          docker build -f Dockerfile -t ${IMAGE}:${TAG} .
+          docker tag ${IMAGE}:${TAG} ${IMAGE}:${LATEST}
+          docker push ${IMAGE}:${TAG}
+          docker push ${IMAGE}:${LATEST}
+
+      # --- Optional: legacy split images for minimal footprint ----------------
       - name: Build and Push Web Docker Image
         run: |
-          docker build -f Dockerfile.web -t ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }} .
-          docker tag ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }} \
-            ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-latest
-          docker push ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
-          docker push ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-latest
+          IMAGE=${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web
+          TAG=${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
+          LATEST=${{ needs.setup.outputs.ENV_NAME }}-latest
+
+          docker build -f Dockerfile.web -t ${IMAGE}:${TAG} .
+          docker tag ${IMAGE}:${TAG} ${IMAGE}:${LATEST}
+          docker push ${IMAGE}:${TAG}
+          docker push ${IMAGE}:${LATEST}
 
       - name: Build and Push Worker Docker Image
         run: |
-          docker build -f Dockerfile.worker -t ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }} .
-          docker tag ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }} \
-            ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-latest
-          docker push ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
-          docker push ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-latest
+          IMAGE=${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker
+          TAG=${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
+          LATEST=${{ needs.setup.outputs.ENV_NAME }}-latest
 
+          docker build -f Dockerfile.worker -t ${IMAGE}:${TAG} .
+          docker tag ${IMAGE}:${TAG} ${IMAGE}:${LATEST}
+          docker push ${IMAGE}:${TAG}
+          docker push ${IMAGE}:${LATEST}
+
+      - name: Build and Push API Docker Image
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-api
+          TAG=${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
+          LATEST=${{ needs.setup.outputs.ENV_NAME }}-latest
+
+          docker build -f Dockerfile.api -t ${IMAGE}:${TAG} .
+          docker tag ${IMAGE}:${TAG} ${IMAGE}:${LATEST}
+          docker push ${IMAGE}:${TAG}
+          docker push ${IMAGE}:${LATEST}
+
+  deploy:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout GitOps repo
         uses: actions/checkout@v4
         with:
@@ -139,10 +161,17 @@ jobs:
           Author: ${{ needs.setup.outputs.COMMIT_AUTHOR }}"
           git push
 
+  cleanup:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
       - name: Cleanup Docker Images
-        if: always()
         run: |
-          docker rmi ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }} || true
-          docker rmi ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-web:${{ needs.setup.outputs.ENV_NAME }}-latest || true
-          docker rmi ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }} || true
-          docker rmi ${{ env.REGISTRY }}/${{ env.ORG_NAME }}/vibevideo-worker:${{ needs.setup.outputs.ENV_NAME }}-latest || true
+          TAG=${{ needs.setup.outputs.ENV_NAME }}-${{ needs.setup.outputs.VERSION }}
+          LATEST=${{ needs.setup.outputs.ENV_NAME }}-latest
+          REG=${{ env.REGISTRY }}/${{ env.ORG_NAME }}
+          for NAME in vibevideo vibevideo-web vibevideo-worker vibevideo-api; do
+            docker rmi ${REG}/${NAME}:${TAG} || true
+            docker rmi ${REG}/${NAME}:${LATEST} || true
+          done

@@ -1,18 +1,7 @@
-import Stripe from "stripe";
 import { db } from "@/server/db";
-import { getStripeSecretKey } from "@/server/shared/env";
 import { asyncSendBackendAlert } from "@/lib/lark";
 import { isStripeNoSuchCustomerError } from "./stripe/stripe-error-utils";
-
-// Local Stripe client for customer management
-let stripe: Stripe | null = null;
-
-function getStripeClient(): Stripe {
-  stripe ??= new Stripe(getStripeSecretKey(), {
-    apiVersion: "2025-09-30.clover",
-  });
-  return stripe;
-}
+import { getStripe } from "./stripe/client";
 
 /**
  * Get or create a Stripe Customer for a given user.
@@ -36,7 +25,7 @@ export async function getOrCreateStripeCustomer(userId: string): Promise<string>
     // Validate the stored customer ID actually exists under the current Stripe key/mode.
     // If it doesn't, clear and recreate to unblock checkout/setup-intent flows.
     try {
-      const existing = await getStripeClient().customers.retrieve(existingStripeCustomerId);
+      const existing = await getStripe().customers.retrieve(existingStripeCustomerId);
       if (!existing.deleted) {
         return existingStripeCustomerId;
       }
@@ -69,7 +58,7 @@ export async function getOrCreateStripeCustomer(userId: string): Promise<string>
     });
   }
 
-  const client = getStripeClient();
+  const client = getStripe();
 
   const customer = await client.customers.create({
     email: user.email ?? undefined,
